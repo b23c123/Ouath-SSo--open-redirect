@@ -1,17 +1,26 @@
 const express = require('express');
 const axios = require('axios');
-const app = express();
+const crypto = require('crypto'); // For generating random passwords
 
+const app = express();
 app.use(express.urlencoded({ extended: true }));
 
+// Function to generate a random password
+function generateRandomPassword() {
+    return crypto.randomBytes(8).toString('hex'); // Generates a 16-character password
+}
+
+// User data (password changes on every refresh)
 let userData = {
     email: "victim@example.com",
-    password: "supersecret123"
+    password: generateRandomPassword()
 };
 
-// ✅ Homepage with a dynamic Open Redirect link
+// ✅ Homepage with a randomly generated password that changes on refresh
 app.get('/', (req, res) => {
-    const redirectUrl = req.query.redirect || 'https://google.com'; // Default value: Google
+    userData.password = generateRandomPassword(); // Update password on each request
+
+    const redirectUrl = req.query.redirect || 'https://google.com'; // Default redirect URL
 
     res.send(`
         <h1>Welcome to My Website</h1>
@@ -41,23 +50,15 @@ app.get('/', (req, res) => {
 // 🚨 Open Redirect Vulnerability
 app.get('/open-redirect', (req, res) => {
     const { redirect } = req.query;
-
-    if (!redirect) {
-        return res.status(400).send("❌ No redirect URL provided!");
-    }
-
+    if (!redirect) return res.status(400).send("❌ No redirect URL provided!");
     console.log(`⚠️ Open Redirect triggered! Redirecting to: ${redirect}`);
     res.redirect(redirect);
 });
 
-// 🚨 Open Redirect Vulnerability in Login
+// 🚨 Open Redirect in Login
 app.get('/login', (req, res) => {
     const { redirect, code, state } = req.query;
-
-    if (!redirect) {
-        return res.status(400).send("❌ No redirect URL provided!");
-    }
-
+    if (!redirect) return res.status(400).send("❌ No redirect URL provided!");
     console.log(`⚠️ Open Redirect: Redirecting user to ${redirect} with code and state`);
     res.redirect(`${redirect}?code=${code || 'fake_auth_00000'}&state=${state || 'default_state'}`);
 });
@@ -65,12 +66,9 @@ app.get('/login', (req, res) => {
 // 🚨 Vulnerable Password Change (Without CSRF Token)
 app.post('/change-password', (req, res) => {
     const { newPassword } = req.body;
-
-    if (!newPassword) {
-        return res.status(400).send("❌ New password required!");
-    }
-
-    userData.password = newPassword;
+    if (!newPassword) return res.status(400).send("❌ New password required!");
+    
+    userData.password = newPassword; // Update user's password
     console.log(`⚠️ Password changed to: ${newPassword}`);
     res.send(`
         ✅ Password changed successfully! <br>
@@ -81,10 +79,7 @@ app.post('/change-password', (req, res) => {
 // 🔗 New Route for Dynamic Redirect
 app.get('/redirect', (req, res) => {
     const { url } = req.query;
-
-    if (!url) {
-        return res.status(400).send("❌ No URL provided!");
-    }
+    if (!url) return res.status(400).send("❌ No URL provided!");
 
     res.send(`
         <h2>🔗 Redirect Link</h2>
@@ -96,10 +91,7 @@ app.get('/redirect', (req, res) => {
 // 🚨 SSRF Vulnerability
 app.get('/fetch-data', async (req, res) => {
     const { url } = req.query;
-
-    if (!url) {
-        return res.status(400).send("❌ URL parameter required!");
-    }
+    if (!url) return res.status(400).send("❌ URL parameter required!");
 
     try {
         const response = await axios.get(url);
